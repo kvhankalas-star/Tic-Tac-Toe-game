@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tic Tac Toe Upgraded</title>
+
+<style>
+* {
+  margin: 0; padding: 0;
+  box-sizing: border-box;
+  font-family: Poppins, sans-serif;
+}
+
+body {
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+  overflow: hidden;
+}
+
+/* BACKGROUND */
+#bgCanvas, #blastCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+/* GAME UI */
+.game-wrapper {
+  position: relative;
+  z-index: 10;
+  text-align: center;
+  padding: 20px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 15px;
+  backdrop-filter: blur(6px);
+  color: white;
+  width: 320px;
+}
+
+h1 { margin-bottom: 10px; }
+
+.mode-select {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 15px;
+}
+.mode-btn {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.2);
+  color: white;
+  cursor: pointer;
+}
+.mode-btn:hover { background: rgba(255,255,255,0.3); }
+
+/* BOARD */
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 90px);
+  gap: 10px;
+  justify-content: center;
+  margin: 15px auto;
+}
+.cell {
+  width: 90px; height: 90px;
+  background: linear-gradient(135deg, #6a11cb, #2575fc);
+  border-radius: 10px;
+  display: flex; justify-content: center; align-items: center;
+  font-size: 2.2rem;
+  color:black;
+  cursor: pointer;
+}
+.cell:hover { background: #ffd691; }
+
+/* STATUS + BUTTON */
+#status { margin-top: 8px; font-size: 1.1rem; }
+#restart {
+  margin-top: 12px;
+  padding: 10px 20px;
+  border: none;
+  background: #9c27b0;
+  color: white;
+  border-radius: 10px;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<!-- Background canvases -->
+<canvas id="bgCanvas"></canvas>
+<canvas id="blastCanvas"></canvas>
+
+<div class="game-wrapper">
+  <h1>Tic Tac Toe</h1>
+
+  <div class="mode-select">
+    <button class="mode-btn" id="pvp">Player vs Player</button>
+    <button class="mode-btn" id="pvc">Player vs Computer</button>
+  </div>
+
+  <div class="board" id="board">
+    <div class="cell" data-index="0"></div>
+    <div class="cell" data-index="1"></div>
+    <div class="cell" data-index="2"></div>
+    <div class="cell" data-index="3"></div>
+    <div class="cell" data-index="4"></div>
+    <div class="cell" data-index="5"></div>
+    <div class="cell" data-index="6"></div>
+    <div class="cell" data-index="7"></div>
+    <div class="cell" data-index="8"></div>
+  </div>
+
+  <p id="status">Select a mode to start</p>
+  <button id="restart">Restart</button>
+</div>
+
+<script>
+// -------------------------------- BACKGROUND PARTICLES ---------------------------------
+const bg = document.getElementById("bgCanvas");
+const bctx = bg.getContext("2d");
+
+bg.width = innerWidth;
+bg.height = innerHeight;
+let particles = [];
+
+class BGParticle {
+  constructor() {
+    this.x = Math.random()*bg.width;
+    this.y = Math.random()*bg.height;
+    this.size = Math.random()*2+1;
+    this.speedX = Math.random()*0.6 - 0.3;
+    this.speedY = Math.random()*0.6 - 0.3;
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    if (this.x < 0 || this.x > bg.width) this.speedX *= -1;
+    if (this.y < 0 || this.y > bg.height) this.speedY *= -1;
+  }
+  draw() {
+    bctx.fillStyle = "white";
+    bctx.beginPath();
+    bctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+    bctx.fill();
+  }
+}
+for (let i=0;i<80;i++) particles.push(new BGParticle());
+
+function animateBG() {
+  bctx.clearRect(0,0,bg.width,bg.height);
+  particles.forEach(p=>{p.update(); p.draw();});
+  requestAnimationFrame(animateBG);
+}
+animateBG();
+
+
+// ----------------------------- GAME LOGIC -----------------------------
+let board = ["","","","","","","","",""];
+let currentPlayer = "X";
+let mode = "";
+const statusEl = document.getElementById("status");
+const cells = document.querySelectorAll(".cell");
+
+document.getElementById("pvp").onclick = ()=>{
+  mode = "pvp";
+  resetGame();
+  statusEl.innerText = "Player X Turn";
+};
+
+document.getElementById("pvc").onclick = ()=>{
+  mode = "pvc";
+  resetGame();
+  statusEl.innerText = "Your Turn (X)";
+};
+
+cells.forEach(cell=>{
+  cell.addEventListener("click",()=>{
+    let i = cell.getAttribute("data-index");
+    if(board[i] !== "" || !mode) return;
+
+    // Player move
+    board[i] = currentPlayer;
+    cell.innerText = currentPlayer;
+
+    if(checkWinner()){
+      triggerBlast();
+      statusEl.innerText = currentPlayer + " Wins!";
+      return;
+    }
+
+    if(!board.includes("")) {
+      statusEl.innerText = "Draw!";
+      return;
+    }
+
+    // Switch turn
+    if(mode === "pvp"){
+      currentPlayer = currentPlayer === "X" ? "O" : "X";
+      statusEl.innerText = "Player " + currentPlayer + " Turn";
+    }
+
+    // Computer Move
+    if(mode === "pvc" && currentPlayer==="X"){
+      setTimeout(computerMove,400);
+    }
+  });
+});
+
+// Computer AI (simple + smart)
+function computerMove(){
+  let emptyIndexes = board.map((val,idx)=> val===""?idx:null).filter(v=>v!==null);
+
+  let move = emptyIndexes[Math.floor(Math.random()*emptyIndexes.length)];
+
+  board[move] = "O";
+  cells[move].innerText = "O";
+
+  if(checkWinner()){
+    triggerBlast();
+    statusEl.innerText = "Computer Wins!";
+    return;
+  }
+
+  if(!board.includes("")) {
+    statusEl.innerText = "Draw!";
+    return;
+  }
+
+  statusEl.innerText = "Your Turn (X)";
+}
+
+// Winner logic
+function checkWinner(){
+  const winPatterns = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  return winPatterns.some(p=>{
+    let [a,b,c] = p;
+    return board[a] && board[a]===board[b] && board[b]===board[c];
+  });
+}
+
+document.getElementById("restart").onclick = ()=> resetGame();
+
+function resetGame(){
+  board = ["","","","","","","","",""];
+  cells.forEach(c=> c.innerText="");
+  currentPlayer = "X";
+  if(mode==="pvc") statusEl.innerText="Your Turn (X)";
+  if(mode==="pvp") statusEl.innerText="Player X Turn";
+}
+
+
+// ----------------------------- CELEBRATION BLAST -----------------------------
+const blast = document.getElementById("blastCanvas");
+const b = blast.getContext("2d");
+blast.width = innerWidth;
+blast.height = innerHeight;
+
+let blastParticles = [];
+
+function triggerBlast(){
+  for(let i=0;i<200;i++){
+    blastParticles.push(new BlastParticle(innerWidth/2, innerHeight/2));
+  }
+}
+
+class BlastParticle{
+  constructor(x,y){
+    this.x=x;
+    this.y=y;
+    this.size=Math.random()*4+2;
+    this.speedX = Math.random()*6-3;
+    this.speedY = Math.random()*6-3;
+    this.alpha=1;
+  }
+  update(){
+    this.x+=this.speedX;
+    this.y+=this.speedY;
+    this.alpha-=0.02;
+  }
+  draw(){
+    b.fillStyle = `rgba(255,165,0,${this.alpha})`;
+    b.beginPath();
+    b.arc(this.x,this.y,this.size,0,Math.PI*2);
+    b.fill();
+  }
+}
+
+function animateBlast(){
+  b.clearRect(0,0,blast.width,blast.height);
+  blastParticles.forEach((p,i)=>{
+    p.update();
+    p.draw();
+    if(p.alpha<=0) blastParticles.splice(i,1);
+  });
+  requestAnimationFrame(animateBlast);
+}
+animateBlast();
+</script>
+
+</body>
+</html>
